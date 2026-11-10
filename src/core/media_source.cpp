@@ -113,6 +113,12 @@ Status MediaSource::open(const std::string& path) {
     info_.fps_num = fps.num;
     info_.fps_den = fps.den != 0 ? fps.den : 1;
     info_.frame_count = stream->nb_frames > 0 ? static_cast<int64_t>(stream->nb_frames) : -1;
+    // Still images (JPEG/PNG) are a single frame; without this the thumbnail
+    // strip / selection would be empty even though the picture decodes fine.
+    if ((info_.codec == CodecId::JPEG || info_.codec == CodecId::PNG) &&
+        info_.frame_count <= 0) {
+        info_.frame_count = 1;
+    }
     info_.container = (format_->iformat != nullptr && format_->iformat->name != nullptr)
                           ? format_->iformat->name
                           : "unknown";

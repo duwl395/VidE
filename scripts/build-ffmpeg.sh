@@ -101,6 +101,7 @@ cd "$out"
     --target-os="$ff_target" $ff_arch \
     --enable-shared --disable-static \
     --disable-autodetect \
+    --enable-zlib \
     --disable-programs --disable-doc \
     --disable-avdevice --disable-avfilter --disable-network \
     --disable-encoders --disable-hwaccels \

@@ -28,6 +28,7 @@ sudo apt-get install -y \
     libgl1-mesa-dev \
     libaom-dev \
     nasm yasm \
+    zlib1g-dev \
     perl \
     curl xz-utils
 

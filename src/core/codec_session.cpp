@@ -95,8 +95,14 @@ Status CodecSession::open(const std::string& path, const OpenOptions& options) {
 
     // Raw video has no container/parameter sets: decode it directly.
     if (options.raw_format != PixelFormat::Unknown) {
+        // The caller may pass the path separately (GUI) or inside OpenOptions
+        // (CLI); make sure the adapter always gets a valid path.
+        OpenOptions raw_options = options;
+        if (raw_options.path.empty()) {
+            raw_options.path = path;
+        }
         raw_ = std::make_unique<RawVideoAdapter>();
-        auto result = raw_->open(options);
+        auto result = raw_->open(raw_options);
         if (!result.ok()) {
             error_ = result.status().message();
             state_ = SessionState::Failed;
@@ -378,6 +384,9 @@ void CodecSession::poll() {
 
 Result<DecodedImage> CodecSession::preview(uint32_t index) {
     if (raw_) {
+        // RawVideoAdapter owns a single ifstream, also used by the thumbnail
+        // worker; serialise access or concurrent seek/read corrupts frames.
+        std::lock_guard<std::mutex> lock(media_mutex_);
         return raw_->decode(index);
     }
     std::lock_guard<std::mutex> lock(media_mutex_);
@@ -386,6 +395,7 @@ Result<DecodedImage> CodecSession::preview(uint32_t index) {
 
 Result<DecodedImage> CodecSession::reco(uint32_t index) {
     if (raw_) {
+        std::lock_guard<std::mutex> lock(media_mutex_);
         return raw_->decode(index);
     }
     if (block_support_) {

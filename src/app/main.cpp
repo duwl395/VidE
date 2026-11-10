@@ -27,6 +27,7 @@
 #endif
 
 #include "common/syntax_json.h"
+#include "codec/raw/raw_video_adapter.h"
 #include "core/codec_session.h"
 #include "core/session.h"
 #include "core/workspace.h"
@@ -90,6 +91,21 @@ vide::OpenOptions toOpenOptions(const CliOptions& options) {
     open.raw_height = options.raw_height;
     open.raw_fps_num = options.raw_fps_num;
     open.raw_fps_den = options.raw_fps_den;
+    // Auto-detect header-less raw video from the file name (e.g.
+    // clip_i420_1280x720_30f.yuv) when no explicit --raw-format was given.
+    if (open.raw_format == vide::PixelFormat::Unknown &&
+        vide::isRawFileExtension(options.input)) {
+        const vide::RawNameInfo raw = vide::parseRawFileName(options.input);
+        if (raw.format != vide::PixelFormat::Unknown && raw.width > 0 && raw.height > 0) {
+            open.raw_format = raw.format;
+            open.raw_width = raw.width;
+            open.raw_height = raw.height;
+            if (open.raw_fps_num <= 0 && raw.fps_num > 0) {
+                open.raw_fps_num = raw.fps_num;
+                open.raw_fps_den = raw.fps_den;
+            }
+        }
+    }
     return open;
 }
 

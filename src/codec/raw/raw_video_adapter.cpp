@@ -1,7 +1,9 @@
 #include "codec/raw/raw_video_adapter.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstring>
+#include <string>
 #include <vector>
 
 namespace vide {
@@ -179,6 +181,129 @@ int64_t rawFrameSize(PixelFormat format, int width, int height) {
         default:
             return -1;
     }
+}
+
+namespace {
+
+std::string toLowerCopy(const std::string& text) {
+    std::string out = text;
+    for (char& c : out) {
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    return out;
+}
+
+bool readUIntAt(const std::string& text, std::size_t& pos, int& value) {
+    if (pos >= text.size() || !std::isdigit(static_cast<unsigned char>(text[pos]))) {
+        return false;
+    }
+    long v = 0;
+    while (pos < text.size() && std::isdigit(static_cast<unsigned char>(text[pos]))) {
+        v = v * 10 + (text[pos] - '0');
+        if (v > 1000000) {
+            v = 1000000;
+        }
+        ++pos;
+    }
+    value = static_cast<int>(v);
+    return true;
+}
+
+}  // namespace
+
+RawNameInfo parseRawFileName(const std::string& path) {
+    RawNameInfo info;
+    const std::size_t slash = path.find_last_of("/\\");
+    const std::string name =
+        toLowerCopy(slash == std::string::npos ? path : path.substr(slash + 1));
+
+    // Pixel format tokens (longest first so e.g. yuv420p wins over i420).
+    struct Token {
+        const char* text;
+        PixelFormat format;
+    };
+    static const Token kTokens[] = {
+        {"yuv420p", PixelFormat::I420},   {"i420", PixelFormat::I420},
+        {"nv12", PixelFormat::NV12},      {"nv21", PixelFormat::NV21},
+        {"yuv422p", PixelFormat::YUV422P}, {"yuv400", PixelFormat::YUV400},
+        {"gray", PixelFormat::YUV400},    {"grey", PixelFormat::YUV400},
+        {"yuv444p", PixelFormat::YUV444P}, {"p010", PixelFormat::P010},
+        {"p012", PixelFormat::P012},      {"p016", PixelFormat::P016},
+        {"rgb888", PixelFormat::RGB888},  {"rgb24", PixelFormat::RGB888},
+    };
+    for (const Token& token : kTokens) {
+        if (name.find(token.text) != std::string::npos) {
+            info.format = token.format;
+            break;
+        }
+    }
+
+    // Dimensions: "<width>x<height>" (also uppercase X).
+    for (std::size_t i = 0; i < name.size(); ++i) {
+        if (!std::isdigit(static_cast<unsigned char>(name[i]))) {
+            continue;
+        }
+        std::size_t j = i;
+        int w = 0;
+        int h = 0;
+        if (!readUIntAt(name, j, w)) {
+            continue;
+        }
+        if (j < name.size() && (name[j] == 'x' || name[j] == 'X') &&
+            readUIntAt(name, ++j, h) && w >= 16 && h >= 16) {
+            info.width = w;
+            info.height = h;
+            break;
+        }
+        i = j;
+    }
+
+    // Frame rate: "<n>fps", "<n>f" (word boundary), or "@<n>".
+    for (std::size_t i = 0; i < name.size(); ++i) {
+        if (name[i] == '@') {
+            std::size_t j = i + 1;
+            int v = 0;
+            if (readUIntAt(name, j, v) && v > 0) {
+                info.fps_num = v;
+                info.fps_den = 1;
+                break;
+            }
+        }
+        if (std::isdigit(static_cast<unsigned char>(name[i])) &&
+            (i == 0 || !std::isdigit(static_cast<unsigned char>(name[i - 1])))) {
+            std::size_t j = i;
+            int v = 0;
+            if (!readUIntAt(name, j, v) || v <= 0) {
+                continue;
+            }
+            if (name.compare(j, 3, "fps") == 0) {
+                info.fps_num = v;
+                info.fps_den = 1;
+                break;
+            }
+            if (j < name.size() && name[j] == 'f' &&
+                (j + 1 >= name.size() ||
+                 !std::isalpha(static_cast<unsigned char>(name[j + 1])))) {
+                info.fps_num = v;
+                info.fps_den = 1;
+                break;
+            }
+        }
+    }
+
+    return info;
+}
+
+bool isRawFileExtension(const std::string& path) {
+    const std::string lower = toLowerCopy(path);
+    static const char* kExts[] = {".yuv", ".raw", ".rgb", ".gray", ".grey"};
+    for (const char* ext : kExts) {
+        const std::size_t n = std::strlen(ext);
+        if (lower.size() >= n && lower.compare(lower.size() - n, n, ext) == 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool RawVideoAdapter::probe(const std::string& path) const {

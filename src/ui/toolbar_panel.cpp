@@ -1,5 +1,6 @@
 #include "ui/toolbar_panel.h"
 
+#include <cfloat>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -12,6 +13,7 @@
 #include "core/cache_store.h"
 #include "core/session.h"
 #include "core/workspace.h"
+#include "codec/raw/raw_video_adapter.h"
 #include "ui/file_dialog.h"
 
 namespace vide {
@@ -29,6 +31,20 @@ constexpr RawFormatEntry kRawFormats[] = {
     {"P010", PixelFormat::P010},     {"P012", PixelFormat::P012},
     {"P016", PixelFormat::P016},     {"RGB888", PixelFormat::RGB888},
 };
+
+// Renders text in a read-only input box so the user can select and copy it
+// (plain ImGui text is not selectable). Used for log/status/errors.
+void copyableText(const char* id, const std::string& text, bool multiline, float height) {
+    std::string buffer = text;
+    buffer.push_back('\0');
+    if (multiline) {
+        ImGui::InputTextMultiline(id, buffer.data(), buffer.size(), ImVec2(-FLT_MIN, height),
+                                  ImGuiInputTextFlags_ReadOnly);
+    } else {
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        ImGui::InputText(id, buffer.data(), buffer.size(), ImGuiInputTextFlags_ReadOnly);
+    }
+}
 
 }  // namespace
 
@@ -136,15 +152,21 @@ void ToolbarPanel::draw(Workspace& workspace) {
                     info.container.empty() ? "?" : info.container.c_str(), state);
         if (codec != nullptr && !codec->error().empty()) {
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.65f, 0.3f, 1.0f));
-            ImGui::TextWrapped("%s", codec->error().c_str());
+            copyableText("##codec_error", codec->error(), true,
+                         ImGui::GetTextLineHeight() * 3.0f);
             ImGui::PopStyleColor();
         }
     } else {
         ImGui::TextUnformatted("No bitstream loaded");
     }
 
+    ImGui::TextUnformatted("Log:");
     ImGui::SameLine();
-    ImGui::TextDisabled("| %s", session.status_message.c_str());
+    if (session.status_message.empty()) {
+        ImGui::TextDisabled("(none)");
+    } else {
+        copyableText("##status", session.status_message, false, 0.0f);
+    }
 
     drawOpenPopup(workspace);
 
@@ -200,6 +222,32 @@ void ToolbarPanel::drawOpenPopup(Workspace& workspace) {
             }
         }
 
+        // Auto-fill raw parameters from the file name when it changes, e.g.
+        // "clip_i420_1280x720_30fps.yuv" -> I420 / 1280x720 / raw enabled.
+        if (parsed_path_ != path_buffer_) {
+            parsed_path_ = path_buffer_;
+            if (path_buffer_[0] != '\0') {
+                const RawNameInfo raw = parseRawFileName(path_buffer_);
+                if (raw.format != PixelFormat::Unknown || isRawFileExtension(path_buffer_)) {
+                    raw_enabled_ = true;
+                    if (raw.format != PixelFormat::Unknown) {
+                        for (int i = 0; i < IM_ARRAYSIZE(kRawFormats); ++i) {
+                            if (kRawFormats[i].format == raw.format) {
+                                raw_format_index_ = i;
+                                break;
+                            }
+                        }
+                    }
+                    if (raw.width > 0) {
+                        raw_width_ = raw.width;
+                    }
+                    if (raw.height > 0) {
+                        raw_height_ = raw.height;
+                    }
+                }
+            }
+        }
+
         ImGui::Checkbox("Raw video (YUV/RGB)", &raw_enabled_);
         if (raw_enabled_) {
             const int format_count = IM_ARRAYSIZE(kRawFormats);
@@ -227,6 +275,7 @@ void ToolbarPanel::drawOpenPopup(Workspace& workspace) {
         if (ImGui::Button("Add", ImVec2(120.0f, 0.0f)) || submitted) {
             if (path_buffer_[0] != '\0') {
                 OpenOptions options;
+                options.path = path_buffer_;
                 if (raw_enabled_) {
                     options.raw_format = kRawFormats[raw_format_index_].format;
                     options.raw_width = raw_width_;

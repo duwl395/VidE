@@ -39,4 +39,20 @@ private:
 // Returns the size in bytes of a single frame, or -1 for an unknown format.
 int64_t rawFrameSize(PixelFormat format, int width, int height);
 
+// Fields parsed from a raw-video file name (missing fields stay 0 / Unknown).
+struct RawNameInfo {
+    PixelFormat format = PixelFormat::Unknown;
+    int width = 0;
+    int height = 0;
+    int fps_num = 0;
+    int fps_den = 1;
+};
+
+// Best-effort parse of pixel format, WxH and fps from a file name, e.g.
+// "test_i420_1280x720_30fps.yuv" -> {I420, 1280, 720, 30, 1}.
+RawNameInfo parseRawFileName(const std::string& path);
+
+// True for typical header-less raw video extensions (.yuv/.raw/.rgb/.gray/...).
+bool isRawFileExtension(const std::string& path);
+
 }  // namespace vide

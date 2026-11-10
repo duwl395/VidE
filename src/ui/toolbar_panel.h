@@ -17,6 +17,7 @@ private:
     void drawCachePopup(Workspace& workspace);
 
     char path_buffer_[512] = {};
+    std::string parsed_path_;   // last path for which raw fields were auto-filled
     bool popup_requested_ = false;
     std::string cache_filter_;
 

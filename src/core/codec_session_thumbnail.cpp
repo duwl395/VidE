@@ -10,6 +10,9 @@ namespace vide {
 
 Result<DecodedImage> CodecSession::thumbnailFor(uint32_t index, int max_w, int max_h) {
     if (raw_) {
+        // Same single ifstream as preview()/reco(); guard against concurrent
+        // seek/read from the main thread.
+        std::lock_guard<std::mutex> lock(media_mutex_);
         return raw_->thumbnail(index, max_w, max_h);
     }
     std::lock_guard<std::mutex> lock(media_mutex_);

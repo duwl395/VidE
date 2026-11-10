@@ -32,6 +32,7 @@ $packages = @(
     "mingw-w64-x86_64-yasm",
     "mingw-w64-x86_64-nasm",
     "mingw-w64-x86_64-ca-certificates",
+    "mingw-w64-x86_64-zlib",
     "make",
     "perl",
     "tar",

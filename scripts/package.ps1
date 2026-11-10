@@ -30,7 +30,13 @@ if (-not (Test-Path $objdump)) {
     throw "objdump.exe not found at $objdump (needed to list DLL dependencies)."
 }
 
-if (Test-Path $distDir) { Remove-Item -Recurse -Force $distDir }
+if (Test-Path $distDir) {
+    try {
+        Remove-Item -Recurse -Force $distDir
+    } catch {
+        throw "Cannot clear $distDir because a file is in use. Close any running build\dist\vide.exe and retry."
+    }
+}
 New-Item -ItemType Directory -Force -Path $distDir | Out-Null
 
 # System DLLs that ship with Windows and must NOT be copied.

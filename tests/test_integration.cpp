@@ -97,6 +97,21 @@ int main() {
         CHECK(!session.hasDocument());
     }
 
+    // ---- Raw open with the path only in the first argument (GUI-style) ---
+    // Regression: the GUI passes the path separately from OpenOptions, so
+    // CodecSession must fill options.path before opening the raw adapter.
+    {
+        vide::Session session;
+        vide::OpenOptions o;
+        o.raw_format = vide::PixelFormat::I420;  // path intentionally left empty
+        o.raw_width = w;
+        o.raw_height = h;
+        CHECK(session.open(clip_a, o).ok());
+        auto image = session.codec()->preview(0);
+        CHECK(image.ok());
+        session.close();
+    }
+
     // ---- Nonexistent file fails cleanly ---------------------------------
     {
         vide::Session session;
